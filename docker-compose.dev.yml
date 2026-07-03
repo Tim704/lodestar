@@ -1,0 +1,20 @@
+# Dev database only — the app itself runs via `pnpm dev` on the host.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lodestar
+      POSTGRES_PASSWORD: lodestar
+      POSTGRES_DB: lodestar
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - lodestar-devdb:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lodestar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  lodestar-devdb:

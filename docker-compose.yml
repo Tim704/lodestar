@@ -1,0 +1,40 @@
+# Production compose for the Pi. App binds 127.0.0.1:3030 (CONTRACT §10) —
+# point the Cloudflare Tunnel ingress at http://localhost:3030 and check the
+# Pi's per-app 30xx port map for collisions before deploying.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://lodestar:${DB_PASSWORD:-lodestar}@db:5432/lodestar
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-false}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      NTFY_SERVER: ${NTFY_SERVER:-https://ntfy.sh}
+      NTFY_DEFAULT_TOPIC: ${NTFY_DEFAULT_TOPIC:-}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      DEFAULT_TZ: ${DEFAULT_TZ:-Europe/Zurich}
+    ports:
+      - "127.0.0.1:3030:3000"
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lodestar
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-lodestar}
+      POSTGRES_DB: lodestar
+    volumes:
+      - lodestar-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lodestar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  lodestar-db:

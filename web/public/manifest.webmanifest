@@ -1,0 +1,17 @@
+{
+  "name": "Lodestar",
+  "short_name": "Lodestar",
+  "description": "The self-hosted student life OS.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f2e8",
+  "theme_color": "#b7791f",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

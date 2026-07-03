@@ -1,0 +1,27 @@
+{
+  "name": "lodestar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted student life OS — tasks, calendar, study pacing, notes, backlog, watchers, one assistant.",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n shared,server,web -c yellow,cyan,magenta \"pnpm --filter @lodestar/shared dev\" \"pnpm --filter @lodestar/server dev\" \"pnpm --filter @lodestar/web dev\"",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "db:dev": "docker compose -f docker-compose.dev.yml up -d",
+    "db:dev:down": "docker compose -f docker-compose.dev.yml down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

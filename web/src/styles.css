@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Night Almanac design tokens (CONTRACT §8) ─────────────────────────── */
+
+:root {
+  --paper: #f7f2e8;
+  --panel: #fffbf2;
+  --ink: #211d14;
+  --muted: #6b6353;
+  --line: #d8cdb4;
+  --gold: #b7791f;
+}
+
+.dark {
+  --paper: #141a24;
+  --panel: #1c2433;
+  --ink: #e8e2d4;
+  --muted: #9aa4b5;
+  --line: #32405a;
+  --gold: #d4a03c;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-paper text-ink font-body antialiased;
+  background-image: radial-gradient(var(--line) 0.5px, transparent 0.5px);
+  background-size: 24px 24px;
+}
+
+/* numerals in stats should line up */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── shared component classes ──────────────────────────────────────────── */
+
+.card {
+  @apply bg-panel border-2 border-ink shadow-almanac rounded-sm;
+}
+
+.card-flat {
+  @apply bg-panel border-2 border-ink rounded-sm;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-1.5 border-2 border-ink rounded-sm px-3 py-1.5
+    text-sm font-semibold shadow-almanac-sm transition-transform
+    active:translate-x-[2px] active:translate-y-[2px] active:shadow-none
+    disabled:opacity-50 disabled:pointer-events-none select-none cursor-pointer;
+}
+
+.btn-primary {
+  @apply btn bg-gold text-white;
+}
+
+.btn-ghost {
+  @apply btn bg-panel;
+}
+
+.btn-danger {
+  @apply btn bg-[#a13d2d] text-white;
+}
+
+.input {
+  @apply w-full bg-panel border-2 border-ink rounded-sm px-2.5 py-1.5 text-sm
+    placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-gold;
+}
+
+.label {
+  @apply block text-xs font-semibold uppercase tracking-wider text-muted mb-1;
+}
+
+.chip {
+  @apply inline-flex items-center gap-1 border border-ink rounded-sm px-1.5 py-0.5 text-[11px] font-semibold;
+}
+
+.h-display {
+  @apply font-display font-bold tracking-tight;
+}
+
+/* markdown-ish rendering for telegrams */
+.telegram p {
+  @apply mb-2;
+}
+.telegram strong {
+  @apply font-bold;
+}
+.telegram ul,
+.telegram ol {
+  @apply mb-2 pl-5;
+}
+.telegram ul {
+  @apply list-disc;
+}
+.telegram ol {
+  @apply list-decimal;
+}
+
+/* note colors keep working in dark mode via soft overlay */
+.note-paper {
+  background: color-mix(in srgb, var(--note-color, var(--panel)) 22%, var(--panel));
+}
+
+::selection {
+  background: var(--gold);
+  color: #fff;
+}
