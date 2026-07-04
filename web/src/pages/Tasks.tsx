@@ -156,7 +156,7 @@ export default function TasksPage() {
             <li key={t.id} className={`card-flat p-3 ${t.is_completed ? 'opacity-60' : ''}`}>
               <div className="flex items-start gap-2.5">
                 <button
-                  className={`mt-0.5 h-5 w-5 shrink-0 border-2 border-ink ${t.is_completed ? 'bg-gold' : 'hover:bg-gold/40'}`}
+                  className={`mt-0.5 h-5 w-5 shrink-0 border-2 border-ink ${t.is_completed ? 'bg-gold' : 'hover:bg-[color:color-mix(in_srgb,var(--accent)_40%,transparent)]'}`}
                   onClick={() => void toggle(t.id)}
                   title={t.is_completed ? 'Reopen' : 'Done'}
                 >

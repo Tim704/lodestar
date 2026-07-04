@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Group, Habit } from '@lodestar/shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { useTheme } from '../theme';
 import { ErrorNote } from '../components/ui';
 
 export default function SettingsPage() {
@@ -23,7 +24,7 @@ export default function SettingsPage() {
   const [joinCode, setJoinCode] = useState('');
 
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [newHabit, setNewHabit] = useState({ name: '', emoji: '💧', target: 8 });
+  const [newHabit, setNewHabit] = useState({ name: '', emoji: '💧', target: 8, weekly: '' });
 
   const [icalPath, setIcalPath] = useState<string | null>(null);
 
@@ -82,12 +83,14 @@ export default function SettingsPage() {
 
   const addHabit = async () => {
     if (!newHabit.name.trim()) return;
+    const weekly = Number(newHabit.weekly);
     await api.post('/api/habits', {
       name: newHabit.name.trim(),
       emoji: newHabit.emoji || '✦',
       target_per_day: newHabit.target,
+      target_per_week: weekly >= 1 && weekly <= 7 ? weekly : null,
     });
-    setNewHabit({ name: '', emoji: '✦', target: 1 });
+    setNewHabit({ name: '', emoji: '✦', target: 1, weekly: '' });
     await load();
   };
 
@@ -100,6 +103,8 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-2xl space-y-4">
       <h1 className="h-display text-3xl">⚙ Settings</h1>
       <ErrorNote error={error} />
+
+      <AppearanceSection />
 
       {/* profile */}
       <section className="card p-4">
@@ -144,14 +149,18 @@ export default function SettingsPage() {
       <section className="card p-4">
         <h2 className="h-display mb-1 text-lg">Habits</h2>
         <p className="mb-3 text-xs text-muted">
-          Daily counters with streaks — water (水), gym, reading. Tap them on Today.
+          Daily counters with streaks — water (水), gym, reading. Tap them on Today. Set an
+          optional ×/week quota for habits with rest days (gym 5×/week keeps its streak).
         </p>
         <ul className="mb-3 space-y-1.5">
           {habits.map((h) => (
             <li key={h.id} className="card-flat flex items-center gap-2 px-3 py-1.5 text-sm">
               <span>{h.emoji}</span>
               <span className="font-semibold">{h.name}</span>
-              <span className="text-xs text-muted">target {h.target_per_day}/day</span>
+              <span className="text-xs text-muted">
+                target {h.target_per_day}/day
+                {h.target_per_week ? ` · ${h.target_per_week}×/week` : ''}
+              </span>
               <button
                 className="btn-ghost ml-auto !px-2 !py-0.5 text-xs"
                 onClick={() => void api.patch(`/api/habits/${h.id}`, { archived: true }).then(load)}
@@ -180,6 +189,16 @@ export default function SettingsPage() {
             title="target per day"
             value={newHabit.target}
             onChange={(e) => setNewHabit({ ...newHabit, target: Number(e.target.value) })}
+          />
+          <input
+            type="number"
+            min={1}
+            max={7}
+            className="input !w-24"
+            title="days per week (optional — for habits with rest days)"
+            placeholder="×/wk"
+            value={newHabit.weekly}
+            onChange={(e) => setNewHabit({ ...newHabit, weekly: e.target.value })}
           />
           <button className="btn-primary" onClick={() => void addHabit()}>
             Add
@@ -280,5 +299,70 @@ export default function SettingsPage() {
         Sign out
       </button>
     </div>
+  );
+}
+
+/**
+ * Appearance — the theme gallery (CONTRACT §8). Each card is a live preview:
+ * the inner div carries data-theme, so the real theme CSS renders it.
+ */
+function AppearanceSection() {
+  const { theme, themes, setTheme } = useTheme();
+
+  return (
+    <section className="card p-4">
+      <h2 className="h-display mb-1 text-lg">Appearance</h2>
+      <p className="mb-3 text-xs text-muted">
+        Six looks, one click. Themes change layout too — some use a sidebar, some a top bar, and
+        the denser ones tighten the whole app.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label="Theme">
+        {themes.map((t) => {
+          const active = t.id === theme.id;
+          return (
+            <button
+              key={t.id}
+              role="radio"
+              aria-checked={active}
+              className={`card-flat overflow-hidden p-0 text-left transition-transform hover:-translate-y-0.5 ${
+                active ? 'ring-2 ring-gold' : ''
+              }`}
+              onClick={() => setTheme(t.id)}
+            >
+              {/* live preview, re-scoped to the candidate theme */}
+              <div
+                data-theme={t.id}
+                aria-hidden="true"
+                className="pointer-events-none select-none p-3"
+                style={{ background: 'var(--paper)', fontFamily: 'var(--font-body)' }}
+              >
+                <div className="card p-2.5">
+                  <div className="h-display text-base leading-tight">Thursday ✦</div>
+                  <div className="mb-1.5 text-[10px]" style={{ color: 'var(--muted)' }}>
+                    4 July · on break
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="chip !text-[9px]">fits 12:00 gap</span>
+                    <span className="btn-primary !px-2 !py-0.5 !text-[10px] !shadow-almanac-sm">
+                      Plan
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-line px-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold">{t.label}</div>
+                  <div className="truncate text-[11px] text-muted">{t.vibe}</div>
+                  <div className="tnum text-[10px] uppercase tracking-wider text-muted">
+                    {t.nav} · {t.density}
+                  </div>
+                </div>
+                {active && <span className="chip shrink-0 border-gold text-gold">active ✦</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

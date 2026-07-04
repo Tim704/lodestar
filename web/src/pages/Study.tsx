@@ -5,7 +5,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DateTime } from 'luxon';
 import {
-  calculatePredictedGrade,
+  gradeFromRoi,
+  targetProximity,
   type Course,
   type CourseOverview,
   type Semester,
@@ -271,7 +272,10 @@ function CourseCard({
 }) {
   const [logMinutes, setLogMinutes] = useState(60);
   const [selfStudy, setSelfStudy] = useState(true);
+  const [effort, setEffort] = useState<number | ''>('');
   const [whatIf, setWhatIf] = useState(c.pace.required_velocity || 1);
+  const [advice, setAdvice] = useState(c.pace.advice);
+  const [adviceBusy, setAdviceBusy] = useState(false);
 
   const logSession = async () => {
     await api.post('/api/study/sessions', {
@@ -279,15 +283,33 @@ function CourseCard({
       date: DateTime.now().toISODate(),
       minutes: logMinutes,
       is_self_study: selfStudy,
+      effort: effort === '' ? null : effort,
     });
     onChanged();
   };
 
-  const projected = calculatePredictedGrade(
-    c.pace.logged_hours + whatIf * c.pace.days_remaining,
-    c.pace.target_hours,
+  const askClerk = async () => {
+    setAdviceBusy(true);
+    try {
+      const d = await api.post<{ advice: string }>('/api/study/advice', { course_id: c.id });
+      setAdvice(d.advice);
+    } catch {
+      /* keep the deterministic line */
+    } finally {
+      setAdviceBusy(false);
+    }
+  };
+
+  // what-if applies the same §4.3 v2 multipliers to the projected raw ROI
+  const projRoi =
+    c.pace.target_hours > 0
+      ? Math.min(100, ((c.pace.logged_hours + whatIf * c.pace.days_remaining) / c.pace.target_hours) * 100)
+      : 0;
+  const projected = gradeFromRoi(
+    Math.max(0, Math.min(100, projRoi * (0.85 + 0.15 * c.pace.consistency) * c.pace.effort_score)),
   );
 
+  const proximity = targetProximity(c.pace.predicted_grade, c.target_grade);
   const behind = c.pace.status === 'behind';
 
   return (
@@ -317,8 +339,52 @@ function CourseCard({
       <div className="mt-3 grid grid-cols-3 gap-2">
         <StatTile label="Needs" value={`${c.pace.required_velocity}`} sub="h/day" />
         <StatTile label="Days left" value={c.pace.days_remaining} />
-        <StatTile label="Trending" value={c.pace.predicted_grade.toFixed(1)} sub="grade" />
+        <StatTile label="Trending" value={c.pace.predicted_grade.toFixed(1)} sub="grade (adj.)" />
       </div>
+
+      {/* how close am I — meter toward the target grade (§4.3) */}
+      <div className="mt-3">
+        <div className="mb-1 flex items-baseline justify-between text-xs text-muted">
+          <span>
+            projected <b className="tnum text-ink">{c.pace.predicted_grade.toFixed(1)}</b> · target{' '}
+            <b className="tnum text-ink">{(c.target_grade ?? 1.0).toFixed(1)}</b>
+            {c.target_grade === null && ' (default)'}
+          </span>
+          <span className="tnum">{Math.round(proximity * 100)}% there</span>
+        </div>
+        <Meter pct={proximity * 100} tone={proximity >= 0.85 ? 'ok' : 'warn'} />
+      </div>
+
+      {/* the one thing to change (§4.3 advice ladder / bureau clerk) */}
+      <div className="mt-2 flex items-start gap-1.5 text-xs italic text-muted">
+        <span className="min-w-0 flex-1">“{advice}”</span>
+        <button
+          className="btn-ghost shrink-0 !px-1.5 !py-0 not-italic"
+          title="Ask the bureau clerk (Gemini) to re-voice this"
+          disabled={adviceBusy}
+          onClick={() => void askClerk()}
+        >
+          {adviceBusy ? '…' : '✉'}
+        </button>
+      </div>
+
+      <details className="mt-2 text-xs text-muted">
+        <summary className="cursor-pointer select-none">grade breakdown</summary>
+        <div className="tnum mt-1 space-y-0.5">
+          <div>raw ROI {c.pace.roi}%</div>
+          <div>
+            × consistency {(0.85 + 0.15 * c.pace.consistency).toFixed(3)} ({c.pace.active_weeks}/
+            {c.pace.weeks_elapsed} active weeks)
+          </div>
+          <div>
+            × effort {c.pace.effort_score.toFixed(3)} (avg {c.pace.avg_effort.toFixed(1)}/5)
+          </div>
+          <div>
+            = adjusted ROI <b className="text-ink">{c.pace.adjusted_roi}%</b> → grade{' '}
+            <b className="text-ink">{c.pace.predicted_grade.toFixed(1)}</b>
+          </div>
+        </div>
+      </details>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3 text-sm">
         <span className="text-xs text-muted">Log:</span>
@@ -335,6 +401,19 @@ function CourseCard({
           <input type="checkbox" checked={selfStudy} onChange={(e) => setSelfStudy(e.target.checked)} />
           self-study
         </label>
+        <select
+          className="input !w-auto !px-1.5 !py-0.5 text-xs"
+          title="How hard was the work? (feeds the grade projection)"
+          value={effort}
+          onChange={(e) => setEffort(e.target.value === '' ? '' : Number(e.target.value))}
+        >
+          <option value="">effort —</option>
+          {[1, 2, 3, 4, 5].map((v) => (
+            <option key={v} value={v}>
+              effort {v}
+            </option>
+          ))}
+        </select>
         <button className="btn-primary !py-0.5 text-xs" onClick={() => void logSession()}>
           Log today
         </button>
@@ -459,6 +538,9 @@ function CourseModal({
   const [name, setName] = useState(course?.name ?? '');
   const [ects, setEcts] = useState(course?.ects ?? 6);
   const [targetHours, setTargetHours] = useState<number>(course ? Number(course.target_hours) : 6 * 30);
+  const [targetGrade, setTargetGrade] = useState<string>(
+    course?.target_grade != null ? String(course.target_grade) : '',
+  );
   const [color, setColor] = useState(course?.color ?? '#6b5ba5');
   const [slots, setSlots] = useState<Array<{ weekday: number; start_time: string; end_time: string; location: string }>>(
     course?.slots.map((s) => ({
@@ -472,16 +554,24 @@ function CourseModal({
 
   const save = async () => {
     setError(null);
+    const target_grade = targetGrade === '' ? null : Number(targetGrade);
     try {
       let id = course?.id;
       if (course) {
-        await api.patch(`/api/study/courses/${course.id}`, { name, ects, target_hours: targetHours, color });
+        await api.patch(`/api/study/courses/${course.id}`, {
+          name,
+          ects,
+          target_hours: targetHours,
+          target_grade,
+          color,
+        });
       } else {
         const created = await api.post<{ course: Course }>('/api/study/courses', {
           semester_id: semesterId,
           name,
           ects,
           target_hours: targetHours,
+          target_grade,
           color,
         });
         id = created.course.id;
@@ -528,6 +618,19 @@ function CourseModal({
             className="input"
             value={targetHours}
             onChange={(e) => setTargetHours(Number(e.target.value))}
+          />
+        </label>
+        <label>
+          <span className="label">Target grade (1.0 best, optional)</span>
+          <input
+            type="number"
+            min={1}
+            max={5}
+            step={0.1}
+            className="input"
+            placeholder="2.0"
+            value={targetGrade}
+            onChange={(e) => setTargetGrade(e.target.value)}
           />
         </label>
         <label>

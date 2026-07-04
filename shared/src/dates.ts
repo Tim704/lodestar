@@ -57,3 +57,14 @@ export function diffDays(from: string, to: string): number {
   };
   return Math.round((p(to) - p(from)) / MS_PER_DAY);
 }
+
+/** Day of week for a date string: 0=Sunday … 6=Saturday (JS getDay()). */
+export function weekdayOf(date: string): number {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/** Monday of the ISO week containing `date` (weeks are Mon..Sun — §4.5b/§4.3). */
+export function mondayOf(date: string): string {
+  return addDaysStr(date, -((weekdayOf(date) + 6) % 7));
+}

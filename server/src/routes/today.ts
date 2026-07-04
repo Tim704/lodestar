@@ -5,7 +5,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { TodayPayload } from '@lodestar/shared';
-import { queryOne } from '../db.js';
+import { query, queryOne } from '../db.js';
 import { requireAuth } from '../lib/auth.js';
 import { computeGaps, fitGap, getLectureBlocks, todayInTz } from '../lib/schedule.js';
 import {
@@ -16,6 +16,7 @@ import {
 } from '../lib/assistant.js';
 import { visibleEvents } from './calendar.js';
 import { habitsWithToday } from './habits.js';
+import { rowToFocus } from './focus.js';
 
 export async function todayRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
@@ -29,6 +30,19 @@ export async function todayRoutes(app: FastifyInstance): Promise<void> {
       getLectureBlocks(user.id, date, weekday),
     ]);
     const gaps = computeGaps(blocks);
+
+    const focusRows = await query<Parameters<typeof rowToFocus>[0]>(
+      `SELECT f.*, t.title AS task_title, c.name AS course_name, c.color AS course_color
+       FROM focus_sessions f
+       LEFT JOIN tasks t ON t.id = f.task_id
+       LEFT JOIN courses c ON c.id = f.course_id
+       WHERE f.user_id = $1 AND f.status IN ('active', 'planned')
+       ORDER BY CASE f.status WHEN 'active' THEN 0 ELSE 1 END,
+                f.scheduled_for ASC NULLS LAST, f.created_at ASC
+       LIMIT 5`,
+      [user.id],
+    );
+    const focusSessions = focusRows.map(rowToFocus);
 
     const [tasks, warnings, habits, media, onBreak, unread, briefing] = await Promise.all([
       topOpenTasks(user.id, 8),
@@ -60,6 +74,10 @@ export async function todayRoutes(app: FastifyInstance): Promise<void> {
       unread_notifications: Number(unread?.n ?? 0),
       briefing: (briefing as TodayPayload['briefing']) ?? null,
       on_break: onBreak,
+      focus: {
+        active: focusSessions.find((f) => f.status === 'active') ?? null,
+        next: focusSessions.find((f) => f.status === 'planned') ?? null,
+      },
     };
   });
 }

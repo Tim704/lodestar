@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import { Link } from 'react-router-dom';
-import type { AssistantDoc, TodayPayload } from '@lodestar/shared';
+import type { AssistantDoc, FocusSession, HabitHistory, TodayPayload } from '@lodestar/shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { EmptyState, Spinner, Telegram, loadDots } from '../components/ui';
@@ -15,6 +15,7 @@ export default function TodayPage() {
   const [data, setData] = useState<TodayPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [briefingBusy, setBriefingBusy] = useState(false);
+  const [expandedHabit, setExpandedHabit] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -94,6 +95,11 @@ export default function TodayPage() {
           </p>
         )}
       </div>
+
+      {/* focus (integration #8) */}
+      {(data.focus.active || data.focus.next) && (
+        <FocusCard active={data.focus.active} next={data.focus.next} />
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* schedule */}
@@ -220,26 +226,59 @@ export default function TodayPage() {
           ) : (
             <ul className="space-y-2">
               {data.habits.map((h) => (
-                <li key={h.id} className="flex items-center gap-2 text-sm">
-                  <span className="w-6 text-center">{h.emoji}</span>
-                  <span className="min-w-0 flex-1 truncate font-semibold">{h.name}</span>
-                  {h.streak > 1 && <span className="chip border-m-habits text-m-habits">🔥 {h.streak}</span>}
-                  <span className="tnum text-muted">
-                    {h.today_count}/{h.target_per_day}
-                  </span>
-                  <button
-                    className="btn-ghost !px-2 !py-0"
-                    onClick={() => void tapHabit(h.id, -1)}
-                    disabled={h.today_count === 0}
-                  >
-                    −
-                  </button>
-                  <button
-                    className={`${h.today_count >= h.target_per_day ? 'btn-ghost' : 'btn-primary'} !px-2 !py-0`}
-                    onClick={() => void tapHabit(h.id, 1)}
-                  >
-                    +
-                  </button>
+                <li key={h.id} className="text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 text-center">{h.emoji}</span>
+                    <button
+                      className="min-w-0 flex-1 truncate text-left font-semibold hover:underline"
+                      title="Show the last 12 weeks"
+                      onClick={() => setExpandedHabit(expandedHabit === h.id ? null : h.id)}
+                    >
+                      {h.name}
+                    </button>
+                    {h.streak > 1 && (
+                      <span className="chip border-m-habits text-m-habits">🔥 {h.streak}</span>
+                    )}
+                    {h.target_per_week != null && (h.weeks_streak ?? 0) > 0 && (
+                      <span
+                        className="chip border-m-habits text-m-habits"
+                        title="Weeks in a row at the weekly quota"
+                      >
+                        ↻ {h.weeks_streak}w
+                      </span>
+                    )}
+                    <span className="tnum text-muted">
+                      {h.today_count}/{h.target_per_day}
+                    </span>
+                    <button
+                      className="btn-ghost !px-2 !py-0"
+                      onClick={() => void tapHabit(h.id, -1)}
+                      disabled={h.today_count === 0}
+                    >
+                      −
+                    </button>
+                    <button
+                      className={`${h.today_count >= h.target_per_day ? 'btn-ghost' : 'btn-primary'} !px-2 !py-0`}
+                      onClick={() => void tapHabit(h.id, 1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                  {h.target_per_week != null && (
+                    <div
+                      className="tnum ml-8 mt-0.5 text-xs tracking-[0.2em] text-m-habits"
+                      title={`This week: ${h.weekly_done}/${h.target_per_week} days at target`}
+                    >
+                      {'●'.repeat(Math.min(h.weekly_done ?? 0, h.target_per_week))}
+                      <span className="opacity-30">
+                        {'●'.repeat(Math.max(0, h.target_per_week - (h.weekly_done ?? 0)))}
+                      </span>
+                      <span className="ml-2 tracking-normal text-muted">
+                        {h.weekly_done}/{h.target_per_week} this week
+                      </span>
+                    </div>
+                  )}
+                  {expandedHabit === h.id && <HabitHeatmap habitId={h.id} target={h.target_per_day} />}
                 </li>
               ))}
             </ul>
@@ -268,6 +307,116 @@ export default function TodayPage() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The active/next focus session (integration #8) — timer lives on /focus. */
+function FocusCard({ active, next }: { active: FocusSession | null; next: FocusSession | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+
+  if (active) {
+    const elapsed = Math.max(0, Math.floor((now - new Date(active.started_at!).getTime()) / 1000));
+    const remaining = active.planned_minutes * 60 - elapsed;
+    const over = remaining < 0;
+    const shown = Math.abs(remaining);
+    return (
+      <Link to="/focus" className="card mb-4 block border-m-study p-3 hover:shadow-almanac">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <span className="text-xs font-semibold uppercase tracking-wider text-m-study">
+              ◐ In session
+            </span>
+            <div className="truncate font-semibold">{active.goal}</div>
+            {active.course_name && <div className="text-xs text-muted">{active.course_name}</div>}
+          </div>
+          <div className={`h-display tnum text-2xl ${over ? 'text-[#a13d2d]' : ''}`}>
+            {over ? '+' : ''}
+            {Math.floor(shown / 60)}:{String(shown % 60).padStart(2, '0')}
+          </div>
+        </div>
+      </Link>
+    );
+  }
+  if (!next) return null;
+  return (
+    <Link to="/focus" className="card mb-4 block p-3 hover:shadow-almanac">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-xs font-semibold uppercase tracking-wider text-m-study">
+            ◐ Next focus
+          </span>
+          <div className="truncate font-semibold">{next.goal}</div>
+          <div className="text-xs text-muted">
+            {next.planned_minutes}m
+            {next.course_name && ` · ${next.course_name}`}
+            {next.scheduled_for &&
+              ` · ${DateTime.fromISO(next.scheduled_for).toFormat('ccc HH:mm')}`}
+          </div>
+        </div>
+        <span className="btn-ghost !py-1 text-xs">open →</span>
+      </div>
+    </Link>
+  );
+}
+
+/** §4.5b graph — contribution-style heatmap of the last 12 weeks (Mon-start). */
+function HabitHeatmap({ habitId, target }: { habitId: string; target: number }) {
+  const [history, setHistory] = useState<HabitHistory | null>(null);
+
+  useEffect(() => {
+    api
+      .get<HabitHistory>(`/api/habits/history?habit_id=${habitId}&weeks=12`)
+      .then(setHistory)
+      .catch(() => setHistory(null));
+  }, [habitId]);
+
+  if (!history) return <div className="ml-8 mt-1 text-xs text-muted">charting…</div>;
+
+  // days start on a Monday (server contract) — chunk into week columns
+  const weeks: Array<Array<HabitHistory['days'][number] | null>> = [];
+  for (let w = 0; w < history.weeks.length; w++) {
+    weeks.push(
+      Array.from({ length: 7 }, (_, d) => history.days[w * 7 + d] ?? null),
+    );
+  }
+
+  return (
+    <div className="ml-8 mt-2">
+      <div className="flex gap-[3px]">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="flex flex-col gap-[3px]">
+            {week.map((day, di) => (
+              <div
+                key={di}
+                className="h-3 w-3 rounded-[2px] border border-line"
+                title={day ? `${day.date}: ${day.count}` : ''}
+                style={{
+                  background: day && day.count > 0
+                    ? `color-mix(in srgb, #4a7c43 ${Math.round(25 + 75 * Math.min(1, day.count / target))}%, transparent)`
+                    : 'transparent',
+                  opacity: day ? 1 : 0.25,
+                }}
+              />
+            ))}
+            {history.target_per_week != null && (
+              <div
+                className={`mt-0.5 h-1 w-3 rounded-sm ${history.weeks[wi]?.met ? 'bg-m-habits' : 'bg-line'}`}
+                title={`Week of ${history.weeks[wi]?.week_start}: ${history.weeks[wi]?.done}/${history.target_per_week}`}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 text-[10px] text-muted">
+        last 12 weeks · darker = closer to the daily target
+        {history.target_per_week != null && ' · green bar = weekly quota met'}
       </div>
     </div>
   );

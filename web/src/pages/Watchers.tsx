@@ -7,10 +7,28 @@ import type { Watcher, WatcherHit } from '@lodestar/shared';
 import { api } from '../api';
 import { EmptyState, ErrorNote, Modal, Spinner } from '../components/ui';
 
+// One-click preset (CONTRACT §4.8): the page renders its unit list via JS, but
+// the static HTML carries the "no more units available in W|27" banner — so we
+// watch the banner and fire when it disappears.
+const W27_PRESET = {
+  name: 'W27 dorm',
+  url: 'https://www.apartments-hn.de/en/book-apartment/',
+  mode: 'regex' as const,
+  selector: 'no more units available in W\\|27',
+  exclude_pattern: '',
+  notify_on: 'disappear' as const,
+  interval_min: 30,
+  create_task: true,
+  task_hint: 'Check W27 availability',
+};
+
+type WatcherForm = typeof W27_PRESET;
+
 export default function WatchersPage() {
   const [watchers, setWatchers] = useState<Watcher[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Watcher | 'new' | null>(null);
+  const [preset, setPreset] = useState<Partial<WatcherForm> | null>(null);
   const [hitsFor, setHitsFor] = useState<Watcher | null>(null);
   const [runBusy, setRunBusy] = useState<string | null>(null);
 
@@ -45,13 +63,31 @@ export default function WatchersPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between gap-2">
         <h1 className="h-display text-3xl">
           <span className="mr-1 text-m-watchers">◉</span>Watchers
         </h1>
-        <button className="btn-primary" onClick={() => setEditing('new')}>
-          + Watcher
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="btn-ghost"
+            title="Prefilled watcher for the W|27 dorm banner — fires when the 'no more units' text disappears"
+            onClick={() => {
+              setPreset(W27_PRESET);
+              setEditing('new');
+            }}
+          >
+            ◉ W27 preset
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setPreset(null);
+              setEditing('new');
+            }}
+          >
+            + Watcher
+          </button>
+        </div>
       </div>
       <p className="mb-4 text-sm text-muted">
         Point one at any page — apartment lists, course seats, grade boards. New items push a
@@ -88,6 +124,11 @@ export default function WatchersPage() {
                   {w.url.replace(/^https?:\/\//, '')}
                 </a>
                 <span className="chip">{w.mode}</span>
+                {w.notify_on === 'disappear' && (
+                  <span className="chip border-m-watchers text-m-watchers" title="Fires when the watched text disappears">
+                    on vanish
+                  </span>
+                )}
                 <span className="chip">every {w.interval_min}m</span>
                 {w.create_task && <span className="chip border-m-tasks text-m-tasks">→ task</span>}
                 <span className="ml-auto text-xs text-muted">
@@ -133,9 +174,14 @@ export default function WatchersPage() {
       {editing && (
         <WatcherModal
           watcher={editing === 'new' ? null : editing}
-          onClose={() => setEditing(null)}
+          preset={editing === 'new' ? preset : null}
+          onClose={() => {
+            setEditing(null);
+            setPreset(null);
+          }}
           onChanged={() => {
             setEditing(null);
+            setPreset(null);
             void load();
           }}
         />
@@ -147,22 +193,25 @@ export default function WatchersPage() {
 
 function WatcherModal({
   watcher,
+  preset,
   onClose,
   onChanged,
 }: {
   watcher: Watcher | null;
+  preset: Partial<WatcherForm> | null;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [form, setForm] = useState({
-    name: watcher?.name ?? '',
-    url: watcher?.url ?? '',
-    mode: watcher?.mode ?? ('css' as 'css' | 'regex'),
-    selector: watcher?.selector ?? '',
-    exclude_pattern: watcher?.exclude_pattern ?? '',
-    interval_min: watcher?.interval_min ?? 30,
-    create_task: watcher?.create_task ?? false,
-    task_hint: watcher?.task_hint ?? '',
+    name: watcher?.name ?? preset?.name ?? '',
+    url: watcher?.url ?? preset?.url ?? '',
+    mode: watcher?.mode ?? preset?.mode ?? ('css' as 'css' | 'regex'),
+    selector: watcher?.selector ?? preset?.selector ?? '',
+    exclude_pattern: watcher?.exclude_pattern ?? preset?.exclude_pattern ?? '',
+    notify_on: watcher?.notify_on ?? preset?.notify_on ?? ('appear' as 'appear' | 'disappear'),
+    interval_min: watcher?.interval_min ?? preset?.interval_min ?? 30,
+    create_task: watcher?.create_task ?? preset?.create_task ?? false,
+    task_hint: watcher?.task_hint ?? preset?.task_hint ?? '',
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -231,6 +280,17 @@ function WatcherModal({
             onChange={(e) => set('exclude_pattern', e.target.value)}
             placeholder="Belegt"
           />
+        </label>
+        <label>
+          <span className="label">Notify when matches…</span>
+          <select
+            className="input"
+            value={form.notify_on}
+            onChange={(e) => set('notify_on', e.target.value as 'appear' | 'disappear')}
+          >
+            <option value="appear">appear (new items show up)</option>
+            <option value="disappear">disappear (watched text goes away)</option>
+          </select>
         </label>
         <div className="flex flex-col justify-end gap-1.5">
           <label className="flex items-center gap-2 text-sm">

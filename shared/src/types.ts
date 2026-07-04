@@ -2,7 +2,7 @@
 // CONTRACT §3/§5. Dates: YYYY-MM-DD strings; instants: ISO-8601 UTC strings.
 
 import type { DeadlineBucket } from './priority.js';
-import type { CoursePace } from './velocity.js';
+import type { CoursePaceV2 } from './velocity.js';
 import type { OverlapResult } from './overlap.js';
 
 // ── auth ────────────────────────────────────────────────────────────────────
@@ -88,6 +88,7 @@ export interface Course {
   name: string;
   ects: number;
   target_hours: number;
+  target_grade: number | null; // German scale 1.0–5.0; null ⇒ meter targets 1.0
   color: string | null;
 }
 
@@ -107,11 +108,12 @@ export interface StudySession {
   date: string;
   minutes: number;
   is_self_study: boolean;
+  effort: number | null; // 1–5; null ⇒ 3 (§4.3 v2)
   note: string | null;
 }
 
 export interface CourseOverview extends Course {
-  pace: CoursePace;
+  pace: CoursePaceV2;
   slots: LectureSlot[];
 }
 
@@ -241,6 +243,7 @@ export interface Watcher {
   mode: 'css' | 'regex';
   selector: string;
   exclude_pattern: string | null;
+  notify_on: 'appear' | 'disappear';
   interval_min: number;
   active: boolean;
   create_task: boolean;
@@ -266,6 +269,7 @@ export interface Habit {
   name: string;
   emoji: string;
   target_per_day: number;
+  target_per_week: number | null; // 1–7; null = pure daily habit (§4.5b)
   unit: string | null;
   color: string | null;
   sort: number;
@@ -276,6 +280,66 @@ export interface HabitToday extends Habit {
   today_count: number;
   streak: number;
   days_met: number;
+  weekly_done: number | null; // §4.5b — null when target_per_week is null
+  weeks_streak: number | null;
+}
+
+export interface HabitHistoryDay {
+  date: string;
+  count: number;
+  met: boolean;
+}
+
+export interface HabitHistoryWeek {
+  week_start: string;
+  done: number;
+  met: boolean | null; // null when no weekly target
+}
+
+export interface HabitHistory {
+  habit_id: string;
+  target_per_day: number;
+  target_per_week: number | null;
+  days: HabitHistoryDay[];
+  weeks: HabitHistoryWeek[];
+}
+
+// ── focus sessions (§4.9, integration #8) ──────────────────────────────────
+
+export type FocusStatus = 'planned' | 'active' | 'done' | 'abandoned';
+
+export interface FocusSession {
+  id: string;
+  user_id: string;
+  task_id: string | null;
+  course_id: string | null;
+  goal: string;
+  planned_minutes: number;
+  scheduled_for: string | null;
+  status: FocusStatus;
+  planned_by: 'ai' | 'manual';
+  started_at: string | null;
+  ended_at: string | null;
+  actual_minutes: number | null;
+  completion_pct: number | null;
+  checkin_note: string | null;
+  created_at: string;
+  // display joins
+  task_title?: string | null;
+  course_name?: string | null;
+  course_color?: string | null;
+}
+
+export interface FocusPlanSuggestion {
+  course_id: string | null;
+  task_id: string | null;
+  goal: string;
+  planned_minutes: number;
+  scheduled_for: string | null; // UTC ISO instant
+  reason?: string;
+  // display-only enrichment from the server; confirm sends ids
+  course_name?: string | null;
+  task_title?: string | null;
 }
 
 // ── notifications / assistant ───────────────────────────────────────────────
@@ -353,6 +417,10 @@ export interface TodayPayload {
   unread_notifications: number;
   briefing: AssistantDoc | null;
   on_break: boolean;
+  focus: {
+    active: FocusSession | null;
+    next: FocusSession | null;
+  };
 }
 
 // ── search ──────────────────────────────────────────────────────────────────

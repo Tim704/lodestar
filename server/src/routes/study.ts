@@ -5,17 +5,20 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { DateTime } from 'luxon';
 import {
-  computeCoursePace,
+  computeCoursePaceV2,
   isValidDateStr,
+  paceAdvice,
   type Course,
   type CourseOverview,
   type LectureSlot,
   type Semester,
+  type SessionLite,
   type StudyBlockProposal,
 } from '@lodestar/shared';
 import { query, queryOne } from '../db.js';
 import { requireAuth } from '../lib/auth.js';
 import { badRequest, notFound } from '../lib/errors.js';
+import { generateText, isGeminiConfigured } from '../lib/gemini.js';
 import { computeGaps, getLectureBlocks, minutesOf, nowInTz } from '../lib/schedule.js';
 
 const zDate = z.string().refine(isValidDateStr, 'expected YYYY-MM-DD');
@@ -34,6 +37,7 @@ const courseSchema = z.object({
   name: z.string().trim().min(1).max(120),
   ects: z.number().int().min(0).max(60),
   target_hours: z.number().min(0).max(2000).optional(),
+  target_grade: z.number().min(1).max(5).nullish(), // German scale (§4.3)
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullish(),
 });
 
@@ -55,6 +59,7 @@ const sessionSchema = z.object({
   date: zDate,
   minutes: z.number().int().min(1).max(24 * 60),
   is_self_study: z.boolean().default(true),
+  effort: z.number().int().min(1).max(5).nullish(), // §4.3 v2 — null ⇒ 3
   note: z.string().trim().max(500).nullish(),
 });
 
@@ -66,7 +71,7 @@ export async function activeSemester(userId: string): Promise<Semester | null> {
   );
 }
 
-/** Per-course pacing for a semester — the shared §4.3 math over SQL sums. */
+/** Per-course pacing for a semester — the shared §4.3 v2 math over raw sessions. */
 export async function courseOverviews(
   userId: string,
   semester: Semester,
@@ -78,12 +83,11 @@ export async function courseOverviews(
   );
   if (!courses.length) return [];
 
-  const sums = await query<{ course_id: string; is_self_study: boolean; total: string }>(
-    `SELECT course_id, is_self_study, sum(minutes)::text AS total
+  const sessions = await query<SessionLite & { course_id: string }>(
+    `SELECT course_id, date, minutes, is_self_study, effort
      FROM study_sessions
-     WHERE user_id = $1 AND date >= $2::date AND date <= $3::date
-     GROUP BY course_id, is_self_study`,
-    [userId, semester.start_date, semester.end_date],
+     WHERE user_id = $1 AND course_id = ANY($2)`,
+    [userId, courses.map((c) => c.id)],
   );
   const slots = await query<LectureSlot & { start_time: string; end_time: string }>(
     `SELECT id, course_id, weekday, start_time::text AS start_time, end_time::text AS end_time, location
@@ -91,24 +95,21 @@ export async function courseOverviews(
     [courses.map((c) => c.id)],
   );
 
-  return courses.map((c) => {
-    const self = sums.find((s) => s.course_id === c.id && s.is_self_study);
-    const lecture = sums.find((s) => s.course_id === c.id && !s.is_self_study);
-    return {
-      ...c,
-      target_hours: Number(c.target_hours),
-      pace: computeCoursePace({
-        targetHours: Number(c.target_hours),
-        loggedSelfMinutes: Number(self?.total ?? 0),
-        loggedLectureMinutes: Number(lecture?.total ?? 0),
-        semesterEndDate: semester.end_date,
-        now,
-      }),
-      slots: slots
-        .filter((s) => s.course_id === c.id)
-        .map((s) => ({ ...s, start_time: s.start_time.slice(0, 5), end_time: s.end_time.slice(0, 5) })),
-    };
-  });
+  return courses.map((c) => ({
+    ...c,
+    target_hours: Number(c.target_hours),
+    target_grade: c.target_grade === null ? null : Number(c.target_grade),
+    pace: computeCoursePaceV2({
+      targetHours: Number(c.target_hours),
+      sessions: sessions.filter((s) => s.course_id === c.id),
+      semesterStartDate: semester.start_date,
+      semesterEndDate: semester.end_date,
+      now,
+    }),
+    slots: slots
+      .filter((s) => s.course_id === c.id)
+      .map((s) => ({ ...s, start_time: s.start_time.slice(0, 5), end_time: s.end_time.slice(0, 5) })),
+  }));
 }
 
 /**
@@ -262,14 +263,15 @@ export async function studyRoutes(app: FastifyInstance): Promise<void> {
     ]);
     if (!semester) throw badRequest('Unknown semester.');
     const row = await queryOne<Course>(
-      `INSERT INTO courses (user_id, semester_id, name, ects, target_hours, color)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      `INSERT INTO courses (user_id, semester_id, name, ects, target_hours, target_grade, color)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [
         request.user.id,
         body.semester_id,
         body.name,
         body.ects,
         body.target_hours ?? body.ects * 30, // 1 ECTS ≈ 30 h
+        body.target_grade ?? null,
         body.color ?? null,
       ],
     );
@@ -285,7 +287,7 @@ export async function studyRoutes(app: FastifyInstance): Promise<void> {
     );
     if (!current) throw notFound('Course not found.');
     const row = await queryOne<Course>(
-      `UPDATE courses SET name = $3, ects = $4, target_hours = $5, color = $6
+      `UPDATE courses SET name = $3, ects = $4, target_hours = $5, target_grade = $6, color = $7
        WHERE id = $1 AND user_id = $2 RETURNING *`,
       [
         id,
@@ -293,6 +295,7 @@ export async function studyRoutes(app: FastifyInstance): Promise<void> {
         body.name ?? current.name,
         body.ects ?? current.ects,
         body.target_hours ?? current.target_hours,
+        body.target_grade !== undefined ? body.target_grade : current.target_grade,
         body.color !== undefined ? body.color : current.color,
       ],
     );
@@ -342,9 +345,17 @@ export async function studyRoutes(app: FastifyInstance): Promise<void> {
     ]);
     if (!course) throw badRequest('Unknown course.');
     const row = await queryOne(
-      `INSERT INTO study_sessions (user_id, course_id, date, minutes, is_self_study, note)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [request.user.id, body.course_id, body.date, body.minutes, body.is_self_study, body.note ?? null],
+      `INSERT INTO study_sessions (user_id, course_id, date, minutes, is_self_study, effort, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        request.user.id,
+        body.course_id,
+        body.date,
+        body.minutes,
+        body.is_self_study,
+        body.effort ?? null,
+        body.note ?? null,
+      ],
     );
     return reply.code(201).send({ session: row });
   });
@@ -396,6 +407,57 @@ export async function studyRoutes(app: FastifyInstance): Promise<void> {
       : await activeSemester(request.user.id);
     if (!semester) return { semester: null, courses: [] };
     return { semester, courses: await courseOverviews(request.user.id, semester) };
+  });
+
+  // §4.3 — re-voice the deterministic advice ladder through the bureau clerk.
+  app.post('/api/study/advice', async (request) => {
+    const body = z.object({ course_id: z.string().uuid() }).parse(request.body);
+    const course = await queryOne<Course>(
+      'SELECT * FROM courses WHERE id = $1 AND user_id = $2',
+      [body.course_id, request.user.id],
+    );
+    if (!course) throw notFound('Course not found.');
+    const semester = await queryOne<Semester>(
+      'SELECT * FROM semesters WHERE id = $1 AND user_id = $2',
+      [course.semester_id, request.user.id],
+    );
+    if (!semester) throw notFound('Semester not found.');
+
+    const overview = (await courseOverviews(request.user.id, semester)).find(
+      (c) => c.id === course.id,
+    );
+    if (!overview) throw notFound('Course not found.');
+    const fallback = paceAdvice(overview.pace);
+
+    if (!isGeminiConfigured()) return { advice: fallback, generator: 'fallback' };
+    try {
+      const advice = await generateText({
+        system:
+          'You are the Lodestar bureau clerk. In one or two wry, warm telegram sentences, tell ' +
+          'the student THE ONE thing to change about how they study this course — grounded ' +
+          'strictly in the breakdown given. No markdown, no lists, no sign-off.',
+        user: JSON.stringify({
+          course: course.name,
+          target_grade: overview.target_grade,
+          raw_roi_pct: overview.pace.roi,
+          adjusted_roi_pct: overview.pace.adjusted_roi,
+          predicted_grade: overview.pace.predicted_grade,
+          required_hours_per_day: overview.pace.required_velocity,
+          deficit_hours: overview.pace.deficit_hours,
+          consistency: overview.pace.consistency,
+          active_weeks: overview.pace.active_weeks,
+          weeks_elapsed: overview.pace.weeks_elapsed,
+          avg_effort_1to5: overview.pace.avg_effort,
+          deterministic_diagnosis: fallback,
+        }),
+        temperature: 0.8,
+        maxOutputTokens: 256,
+      });
+      return { advice, generator: 'gemini' };
+    } catch (err) {
+      console.warn('[study] advice via Gemini failed:', (err as Error).message);
+      return { advice: fallback, generator: 'fallback' };
+    }
   });
 
   app.get('/api/study/blocks', async (request) => {

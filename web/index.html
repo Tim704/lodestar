@@ -12,6 +12,33 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E"
     />
     <title>Lodestar</title>
+    <script>
+      // No-flash theme boot (CONTRACT §8): set data-theme/-density/-nav on
+      // <html> before the bundle loads. Legacy values migrate here too.
+      (function () {
+        var META = {
+          almanac: ['comfortable', 'sidebar'],
+          graphite: ['comfortable', 'topbar'],
+          observatory: ['comfortable', 'sidebar'],
+          ephemeris: ['compact', 'topbar'],
+          riso: ['comfortable', 'sidebar'],
+          broadsheet: ['compact', 'topbar'],
+        };
+        var t;
+        try {
+          t = localStorage.getItem('lodestar-theme');
+        } catch (e) {
+          t = null;
+        }
+        if (t === 'dark') t = 'observatory';
+        else if (t === 'light') t = 'almanac';
+        if (!META[t]) t = 'almanac';
+        var el = document.documentElement;
+        el.dataset.theme = t;
+        el.dataset.density = META[t][0];
+        el.dataset.nav = META[t][1];
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -15,6 +15,7 @@ const watcherSchema = z.object({
   mode: z.enum(['css', 'regex']),
   selector: z.string().trim().min(1).max(500),
   exclude_pattern: z.string().trim().max(200).nullish(),
+  notify_on: z.enum(['appear', 'disappear']).default('appear'),
   interval_min: z.number().int().min(5).max(24 * 60).default(30),
   active: z.boolean().default(true),
   create_task: z.boolean().default(false),
@@ -24,7 +25,7 @@ const watcherSchema = z.object({
 function validateSelector(mode: 'css' | 'regex', selector: string): void {
   if (mode === 'regex') {
     try {
-      new RegExp(selector, 'g');
+      new RegExp(selector, 'gi'); // gi per CONTRACT §4.8 (v2)
     } catch (err) {
       throw badRequest(`Invalid regex: ${(err as Error).message}`);
     }
@@ -32,7 +33,7 @@ function validateSelector(mode: 'css' | 'regex', selector: string): void {
 }
 
 const LIST_SQL = `
-  SELECT id, user_id, name, url, mode, selector, exclude_pattern, interval_min, active,
+  SELECT id, user_id, name, url, mode, selector, exclude_pattern, notify_on, interval_min, active,
          create_task, task_hint, last_run_at, last_status, last_error,
          COALESCE(jsonb_array_length(state->'known'), 0) AS known_count
   FROM watchers`;
@@ -51,9 +52,9 @@ export async function watcherRoutes(app: FastifyInstance): Promise<void> {
     const body = watcherSchema.parse(request.body);
     validateSelector(body.mode, body.selector);
     const row = await queryOne(
-      `INSERT INTO watchers (user_id, name, url, mode, selector, exclude_pattern, interval_min,
-                             active, create_task, task_hint)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO watchers (user_id, name, url, mode, selector, exclude_pattern, notify_on,
+                             interval_min, active, create_task, task_hint)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id`,
       [
         request.user.id,
@@ -62,6 +63,7 @@ export async function watcherRoutes(app: FastifyInstance): Promise<void> {
         body.mode,
         body.selector,
         body.exclude_pattern ?? null,
+        body.notify_on,
         body.interval_min,
         body.active,
         body.create_task,
@@ -87,7 +89,7 @@ export async function watcherRoutes(app: FastifyInstance): Promise<void> {
     await query(
       `UPDATE watchers
        SET name = $3, url = $4, mode = $5, selector = $6, exclude_pattern = $7,
-           interval_min = $8, active = $9, create_task = $10, task_hint = $11
+           notify_on = $8, interval_min = $9, active = $10, create_task = $11, task_hint = $12
        WHERE id = $1 AND user_id = $2`,
       [
         id,
@@ -97,6 +99,7 @@ export async function watcherRoutes(app: FastifyInstance): Promise<void> {
         mode,
         selector,
         body.exclude_pattern !== undefined ? body.exclude_pattern : current.exclude_pattern,
+        body.notify_on ?? current.notify_on,
         body.interval_min ?? current.interval_min,
         body.active ?? current.active,
         body.create_task ?? current.create_task,

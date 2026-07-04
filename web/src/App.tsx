@@ -5,6 +5,7 @@ import { Spinner } from './components/ui';
 import LoginPage from './pages/Login';
 import TodayPage from './pages/Today';
 import TasksPage from './pages/Tasks';
+import FocusPage from './pages/Focus';
 import CalendarPage from './pages/Calendar';
 import StudyPage from './pages/Study';
 import NotesPage from './pages/Notes';
@@ -38,6 +39,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<TodayPage />} />
         <Route path="/tasks" element={<TasksPage />} />
+        <Route path="/focus" element={<FocusPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/study" element={<StudyPage />} />
         <Route path="/notes" element={<NotesPage />} />

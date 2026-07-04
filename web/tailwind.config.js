@@ -1,7 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  darkMode: ['class'],
   theme: {
     extend: {
       colors: {
@@ -10,8 +9,11 @@ export default {
         ink: 'var(--ink)',
         muted: 'var(--muted)',
         line: 'var(--line)',
-        gold: 'var(--gold)',
-        // module accents (CONTRACT §8)
+        edge: 'var(--edge)',
+        accent: 'var(--accent)',
+        'accent-ink': 'var(--accent-ink)',
+        gold: 'var(--gold)', // alias of --accent (CONTRACT §8.1)
+        // module accents — theme-invariant (CONTRACT §8.1)
         'm-tasks': '#b7791f',
         'm-calendar': '#2f7f6f',
         'm-study': '#6b5ba5',
@@ -21,20 +23,20 @@ export default {
         'm-habits': '#4a7c43',
       },
       fontFamily: {
-        display: ['"Iowan Old Style"', '"Palatino Linotype"', 'Palatino', 'Georgia', 'serif'],
-        body: [
-          'system-ui',
-          '-apple-system',
-          '"Segoe UI"',
-          'Roboto',
-          'Helvetica',
-          'Arial',
-          'sans-serif',
-        ],
+        display: ['var(--font-display)', 'Georgia', 'serif'],
+        body: ['var(--font-body)', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        almanac: '4px 4px 0 0 var(--ink)',
-        'almanac-sm': '2px 2px 0 0 var(--ink)',
+        almanac: 'var(--shadow-card)',
+        'almanac-sm': 'var(--shadow-btn)',
+      },
+      borderRadius: {
+        sm: 'var(--radius)',
+      },
+      borderWidth: {
+        // border-2 (checkboxes, section dividers, the mobile bar…) follows the
+        // theme's control weight (CONTRACT §8.1)
+        2: 'var(--control-w)',
       },
     },
   },

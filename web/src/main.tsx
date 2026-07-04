@@ -3,14 +3,11 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './auth';
+import { ThemeProvider } from './theme';
 import './styles.css';
 
-// theme before first paint: manual choice wins, else follow the OS
-const stored = localStorage.getItem('lodestar-theme');
-const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-if (stored === 'dark' || (!stored && prefersDark)) {
-  document.documentElement.classList.add('dark');
-}
+// theme is applied pre-paint by the inline script in index.html (CONTRACT §8);
+// ThemeProvider takes over from there for runtime switching.
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
@@ -22,7 +19,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

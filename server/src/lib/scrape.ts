@@ -22,9 +22,10 @@ export interface WatcherRow {
   mode: 'css' | 'regex';
   selector: string;
   exclude_pattern: string | null;
+  notify_on: 'appear' | 'disappear';
   create_task: boolean;
   task_hint: string | null;
-  state: { known?: string[] };
+  state: { known?: string[]; present?: boolean };
 }
 
 const normalize = (s: string): string => s.replace(/\s+/g, ' ').trim();
@@ -43,7 +44,8 @@ export function extractItems(
       if (items.length >= MAX_ITEMS_PER_RUN) break;
     }
   } else {
-    const re = new RegExp(selector, 'g');
+    // 'gi' per CONTRACT §4.8 (v2) — banner matching is case-insensitive
+    const re = new RegExp(selector, 'gi');
     let m: RegExpExecArray | null;
     while ((m = re.exec(body)) !== null && items.length < MAX_ITEMS_PER_RUN) {
       const text = normalize(m[1] ?? m[0]);
@@ -52,6 +54,17 @@ export function extractItems(
     }
   }
   return [...new Set(items)];
+}
+
+/**
+ * §4.8 disappear transition: fire exactly when a previously-present (or
+ * unknown) match is gone this run; re-arm when the text returns.
+ */
+export function decideDisappear(
+  prevPresent: boolean | undefined,
+  matchNow: boolean,
+): { fire: boolean; present: boolean } {
+  return { fire: prevPresent !== false && !matchNow, present: matchNow };
 }
 
 export interface RunResult {
@@ -80,6 +93,43 @@ export async function runWatcher(w: WatcherRow): Promise<RunResult> {
       } catch {
         /* bad exclude pattern — ignore it rather than break the watcher */
       }
+    }
+
+    if (w.notify_on === 'disappear') {
+      // §4.8: fire on the present → absent transition, then re-arm on return.
+      const { fire, present } = decideDisappear(w.state.present, items.length > 0);
+      result = { ok: true, found: items.length, new_items: fire ? ['match disappeared'] : [] };
+
+      await query(
+        `UPDATE watchers
+         SET last_run_at = now(), last_status = 'ok', last_error = NULL, state = $2
+         WHERE id = $1`,
+        [w.id, JSON.stringify({ known: w.state.known ?? [], present })],
+      );
+
+      if (fire) {
+        await query('INSERT INTO watcher_hits (watcher_id, item) VALUES ($1, $2)', [
+          w.id,
+          'match disappeared',
+        ]);
+        await notify(w.user_id, {
+          type: 'watcher',
+          title: `${w.name}: watched text gone`,
+          body: `The watched text no longer matches — check now.\n${w.url}`,
+          link: '/watchers',
+          priority: 'high',
+          tags: 'eyes',
+        });
+        if (w.create_task) {
+          await query(
+            `INSERT INTO tasks (user_id, title, importance, cognitive_load, duration_min,
+                                enrichment_source, source, source_ref)
+             VALUES ($1, $2, 8, 1, 15, 'heuristic', 'watcher', $3)`,
+            [w.user_id, w.task_hint || `Check ${w.name}`, w.id],
+          );
+        }
+      }
+      return result;
     }
 
     const known = new Set(w.state.known ?? []);
@@ -137,7 +187,7 @@ export async function runWatcher(w: WatcherRow): Promise<RunResult> {
 /** All active watchers whose interval has elapsed — the scheduler's work list. */
 export async function dueWatchers(): Promise<WatcherRow[]> {
   return query<WatcherRow>(
-    `SELECT id, user_id, name, url, mode, selector, exclude_pattern, create_task, task_hint, state
+    `SELECT id, user_id, name, url, mode, selector, exclude_pattern, notify_on, create_task, task_hint, state
      FROM watchers
      WHERE active
        AND (last_run_at IS NULL OR last_run_at + (interval_min || ' minutes')::interval <= now())
@@ -148,7 +198,7 @@ export async function dueWatchers(): Promise<WatcherRow[]> {
 
 export async function getWatcher(id: string, userId: string): Promise<WatcherRow | null> {
   return queryOne<WatcherRow>(
-    `SELECT id, user_id, name, url, mode, selector, exclude_pattern, create_task, task_hint, state
+    `SELECT id, user_id, name, url, mode, selector, exclude_pattern, notify_on, create_task, task_hint, state
      FROM watchers WHERE id = $1 AND user_id = $2`,
     [id, userId],
   );

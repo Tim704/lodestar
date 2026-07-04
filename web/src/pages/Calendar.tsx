@@ -138,7 +138,7 @@ function MonthView() {
                 key={date}
                 className={`min-h-[72px] border-b border-r border-line p-1 text-left align-top hover:bg-paper ${
                   inMonth ? '' : 'opacity-40'
-                } ${date === today ? 'bg-gold/10' : ''}`}
+                } ${date === today ? 'bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]' : ''}`}
                 onClick={() => setSelected(date)}
               >
                 <div className="flex items-center justify-between">
