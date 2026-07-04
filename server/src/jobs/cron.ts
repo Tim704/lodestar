@@ -52,7 +52,7 @@ async function runBriefingJob(user: UserRow): Promise<void> {
     type: 'briefing',
     title: 'Your morning telegram is ready',
     body: 'Lectures, gaps, the order of execution, and one nudge.',
-    link: '/',
+    link: '/overview',
     tags: 'newspaper',
   });
   console.log(`[cron] briefing generated for ${user.username} (${date})`);

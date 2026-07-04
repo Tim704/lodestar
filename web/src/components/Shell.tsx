@@ -11,12 +11,16 @@ import { useTheme } from '../theme';
 import { CommandBar } from './CommandBar';
 import { Bell } from './Bell';
 
+// v4 nav order (CONTRACT changelog): Fortnight is home, Overview demoted.
+// `mobile` marks the subset shown in the bottom bar (5 + More).
 const NAV = [
-  { to: '/', label: 'Today', icon: '✦' },
-  { to: '/tasks', label: 'Tasks', icon: '◈', accent: 'text-m-tasks' },
-  { to: '/focus', label: 'Focus', icon: '◐', accent: 'text-m-study' },
-  { to: '/calendar', label: 'Calendar', icon: '☾', accent: 'text-m-calendar' },
+  { to: '/', label: 'Fortnight', icon: '✦', mobile: true },
+  { to: '/overview', label: 'Overview', icon: '◎', mobile: true },
+  { to: '/tasks', label: 'Tasks', icon: '◈', accent: 'text-m-tasks', mobile: true },
+  { to: '/focus', label: 'Focus', icon: '◐', accent: 'text-m-study', mobile: true },
+  { to: '/projects', label: 'Projects', icon: '⚑', accent: 'text-m-projects', mobile: true },
   { to: '/study', label: 'Study', icon: '△', accent: 'text-m-study' },
+  { to: '/calendar', label: 'Calendar', icon: '☾', accent: 'text-m-calendar' },
   { to: '/notes', label: 'Notes', icon: '❏', accent: 'text-m-notes' },
   { to: '/backlog', label: 'Backlog', icon: '☰', accent: 'text-m-backlog' },
   { to: '/watchers', label: 'Watchers', icon: '◉', accent: 'text-m-watchers' },
@@ -125,7 +129,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const mobileBar = (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex justify-around border-t-2 border-edge bg-panel px-1 py-1.5 md:hidden">
-      {NAV.map((n) => (
+      {NAV.filter((n) => n.mobile).map((n) => (
         <NavLink
           key={n.to}
           to={n.to}

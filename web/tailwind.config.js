@@ -21,6 +21,7 @@ export default {
         'm-backlog': '#b0532f',
         'm-watchers': '#33718f',
         'm-habits': '#4a7c43',
+        'm-projects': '#8a4f7d',
       },
       fontFamily: {
         display: ['var(--font-display)', 'Georgia', 'serif'],

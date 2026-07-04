@@ -1,6 +1,6 @@
 // Minimal app-shell service worker: cache-first for the static build,
 // network-only for /api, /ws and /ical (never cache live data).
-const CACHE = 'lodestar-v3';
+const CACHE = 'lodestar-v4';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest', '/icon.svg'])));

@@ -33,7 +33,7 @@ export interface Group {
 // ── tasks ───────────────────────────────────────────────────────────────────
 
 export type EnrichmentSource = 'gemini' | 'heuristic' | 'manual';
-export type TaskSource = 'manual' | 'capture' | 'note' | 'watcher' | 'study';
+export type TaskSource = 'manual' | 'capture' | 'note' | 'watcher' | 'study' | 'project';
 
 export interface Task {
   id: string;
@@ -47,6 +47,7 @@ export interface Task {
   enrichment_source: EnrichmentSource;
   due_at: string | null;
   course_id: string | null;
+  project_id: string | null;
   source: TaskSource;
   source_ref: string | null;
   is_completed: boolean;
@@ -304,6 +305,69 @@ export interface HabitHistory {
   weeks: HabitHistoryWeek[];
 }
 
+// ── projects (§4.12, integration #9) ────────────────────────────────────────
+
+export type ProjectStatus = 'idea' | 'active' | 'paused' | 'shipped' | 'shelved';
+
+export const PROJECT_STATUSES: ProjectStatus[] = [
+  'idea',
+  'active',
+  'paused',
+  'shipped',
+  'shelved',
+];
+
+export interface Project {
+  id: string;
+  user_id: string;
+  name: string;
+  blurb: string | null;
+  status: ProjectStatus;
+  next_action: string | null;
+  repo_url: string | null;
+  live_url: string | null;
+  color: string | null;
+  tags: string[];
+  pinned: boolean;
+  sort: number;
+  created_at: string;
+  updated_at: string;
+  open_tasks?: number; // list join
+}
+
+export interface ProjectSuggestion {
+  title: string;
+  reason?: string | null;
+}
+
+// ── fortnight (§4.11 — the home page) ──────────────────────────────────────
+
+export interface FortnightTask {
+  id: string;
+  title: string;
+  is_completed: boolean;
+  duration_min: number;
+  course_id: string | null;
+  project_id: string | null;
+  deadline_bucket: DeadlineBucket;
+}
+
+export interface FortnightEvent extends CalendarEvent {
+  is_exam: boolean;
+}
+
+export interface FortnightDay {
+  date: string;
+  classes: LectureBlock[];
+  due_tasks: FortnightTask[];
+  events: FortnightEvent[];
+}
+
+export interface FortnightPayload {
+  start: string;
+  days: FortnightDay[];
+}
+
 // ── focus sessions (§4.9, integration #8) ──────────────────────────────────
 
 export type FocusStatus = 'planned' | 'active' | 'done' | 'abandoned';
@@ -420,6 +484,10 @@ export interface TodayPayload {
   focus: {
     active: FocusSession | null;
     next: FocusSession | null;
+  };
+  projects: {
+    active_count: number;
+    stale: { id: string; name: string; days_quiet: number } | null;
   };
 }
 

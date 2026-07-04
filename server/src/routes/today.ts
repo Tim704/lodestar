@@ -78,6 +78,34 @@ export async function todayRoutes(app: FastifyInstance): Promise<void> {
         active: focusSessions.find((f) => f.status === 'active') ?? null,
         next: focusSessions.find((f) => f.status === 'planned') ?? null,
       },
+      projects: await projectsStrip(user.id),
     };
   });
+}
+
+/** §4.12 — the Overview nudge: active count + the quietest active project. */
+async function projectsStrip(userId: string): Promise<TodayPayload['projects']> {
+  const count = await queryOne<{ n: number }>(
+    `SELECT count(*)::int AS n FROM projects WHERE user_id = $1 AND status = 'active'`,
+    [userId],
+  );
+  const stale = await queryOne<{ id: string; name: string; updated_at: Date }>(
+    `SELECT id, name, updated_at FROM projects
+     WHERE user_id = $1 AND status = 'active'
+     ORDER BY updated_at ASC LIMIT 1`,
+    [userId],
+  );
+  return {
+    active_count: count?.n ?? 0,
+    stale: stale
+      ? {
+          id: stale.id,
+          name: stale.name,
+          days_quiet: Math.max(
+            0,
+            Math.floor((Date.now() - new Date(stale.updated_at).getTime()) / 86_400_000),
+          ),
+        }
+      : null,
+  };
 }

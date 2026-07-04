@@ -101,6 +101,26 @@ export default function TodayPage() {
         <FocusCard active={data.focus.active} next={data.focus.next} />
       )}
 
+      {/* projects nudge (integration #9) */}
+      {data.projects.active_count > 0 && (
+        <Link
+          to="/projects"
+          className="card-flat mb-4 flex flex-wrap items-center gap-2 px-3 py-2 text-sm hover:shadow-almanac-sm"
+        >
+          <span className="text-m-projects">⚑</span>
+          <span className="tnum font-semibold">
+            {data.projects.active_count} active project{data.projects.active_count === 1 ? '' : 's'}
+          </span>
+          {data.projects.stale && data.projects.stale.days_quiet >= 3 && (
+            <span className="text-xs text-muted">
+              · quietest: <b className="text-ink">{data.projects.stale.name}</b> (
+              {data.projects.stale.days_quiet}d untouched)
+            </span>
+          )}
+          <span className="ml-auto text-xs text-muted">open the board →</span>
+        </Link>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         {/* schedule */}
         <div className="card p-4">

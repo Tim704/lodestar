@@ -90,6 +90,7 @@ export default function TasksPage() {
     note: '❏',
     watcher: '◉',
     study: '△',
+    project: '⚑',
   };
 
   return (

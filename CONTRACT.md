@@ -1,10 +1,20 @@
-# Lodestar — Contract v3
+# Lodestar — Contract v4
 
 **Single source of truth.** Every identifier, route, env var, formula, and constant in the
 codebase must match this document literally. When code and contract disagree, the contract wins;
 change the contract first, then the code.
 
 ## Changelog
+
+- **v4 (2026-07-04)** — page reorg + Projects:
+  - Home `/` is now the **Fortnight** — a two-week calendar of classes, due tasks, and events
+    (`GET /api/fortnight`, §4.11). The composite dashboard moved to **`/overview`** (its backend
+    stays `GET /api/today`, which now also carries a `projects` strip).
+  - New **Projects** module (§4.12): `projects` table, `tasks.project_id`, task `source`
+    gains `'project'`, routes `/api/projects*` incl. confirmable AI/heuristic "next steps".
+    Integration #9: Projects ↔ Tasks; Overview nudges the quietest active project; the weekly
+    review mentions projects shipped / gone quiet. Module accent `m-projects #8a4f7d`.
+  - Assistant briefing notification links to `/overview`.
 
 - **v3 (2026-07-04)** — §8 rewritten from the single "Night Almanac" system into a **theming
   contract**: six user-selectable themes (`almanac`, `graphite`, `observatory`, `ephemeris`,
@@ -79,8 +89,14 @@ Migrations live in `server/migrations/NNN_name.sql`, applied in filename order, 
 - `memberships` — `(user_id, group_id)` PK, `role` (`member`|`owner`)
 - `tasks` — `user_id`, `title`, `notes`, `importance` (1–10), `cognitive_load` (1–5),
   `duration_min` (≥1), `reasoning`, `enrichment_source` (`gemini`|`heuristic`|`manual`),
-  `due_at timestamptz?`, `course_id?`, `source` (`manual`|`capture`|`note`|`watcher`|`study`),
+  `due_at timestamptz?`, `course_id?`, `project_id? → projects (SET NULL)`,
+  `source` (`manual`|`capture`|`note`|`watcher`|`study`|`project`),
   `source_ref text?`, `is_completed`, `completed_at?`, `created_at`
+- `projects` — `user_id`, `name`, `blurb?`, `status` (`idea`|`active`|`paused`|`shipped`|`shelved`,
+  default `idea`), `next_action?`, `repo_url?` (free text; UI prefixes `https://` when missing),
+  `live_url?`, `color?`, `tags text[]` (default `{}`), `pinned bool` (default false), `sort int`,
+  `created_at`, `updated_at` (bumped by any project PATCH, by adding a task via the project
+  routes, and by suggest/confirm — it is the "last touched" signal)
 - `semesters` — `user_id`, `name`, `start_date`, `end_date`, `is_active`
 - `courses` — `user_id`, `semester_id`, `name`, `ects int`, `target_hours numeric`
   (default `ects × 30`), `target_grade numeric?` (German scale 1.0–5.0; null ⇒ meter targets 1.0),
@@ -287,6 +303,44 @@ synthesize one 18:30 / 50-min slot per remaining day. Cap: 8 suggestions.
 15–180, `scheduled_for` must parse — invalid entries are dropped; empty result falls back to the
 heuristic.
 
+### 4.11 Fortnight assembly (the home page)
+
+`GET /api/fortnight?start=YYYY-MM-DD` (default: **Monday of the current user-local week**;
+`start` need not be a Monday) returns `{start, days: FortnightDay[14]}` — assembled server-side
+so the page is one fetch. For each of the 14 consecutive local dates:
+
+- `classes` — the §4.6 lecture-block expansion: the user's `lecture_slots` whose `weekday`
+  matches the date and whose course's semester covers it, sorted by start time.
+- `due_tasks` — the user's tasks (completed included, so checked-off items render struck) whose
+  `due_at`, converted to the user's tz, falls on that date; each carries its §4.1
+  `deadline_bucket` computed at request time. Slim shape: `{id, title, is_completed,
+  duration_min, course_id, project_id, deadline_bucket}`.
+- `events` — §5 visible events (own + group) covering the date: all-day events span every date
+  of their inclusive range within the window; timed events land on the local date of `start_utc`.
+  Each event carries `is_exam` = (§4.1 academic-keyword multiplier > 1 for its title).
+
+`/` (Fortnight) and `/calendar` (full planner) are distinct surfaces — never merged.
+
+### 4.12 Projects semantics
+
+Statuses flow freely via PATCH; `Promote to active` is UI sugar for `{status:'active'}`. The
+Overview strip reports `{active_count, stale}` where **stale** = the `active` project with the
+oldest `updated_at` (plus `days_quiet = floor(now − updated_at, days)`); null when no active
+projects. The weekly review facts include projects with `status='shipped'` whose `updated_at`
+falls in the review week, and up to 3 `active` projects untouched for > 14 days.
+
+**Suggest next steps** (`POST /api/projects/:id/suggest`) follows the assistant pattern —
+proposals only, the user confirms. *Heuristic fallback*, in order, skipping any suggestion whose
+title already matches an open task of the project (case-insensitive):
+1. the project's `next_action`, when set;
+2. `Write a one-page spec for {name} — scope, non-goals, first slice`;
+3. `Set up the {name} repo — scaffold, README, deploy notes`;
+4. `Build the smallest end-to-end slice of {name} and show it to someone`.
+Capped at 3. *Gemini path:* name + blurb + next_action + open-task titles in, ≤3 concrete
+`{title, reason}` suggestions out (zod-validated; empty → heuristic).
+`POST /api/projects/:id/suggest/confirm {titles}` creates the chosen tasks via §4.2 enrichment
+with `source='project'`, `project_id` set.
+
 ## 5. API routes (all JSON under `/api`, cookie-authed unless noted)
 
 | Area | Routes |
@@ -294,7 +348,9 @@ heuristic.
 | meta | `GET /healthz` (public) |
 | auth | `POST /api/auth/register` `{username,password,display_name,invite_code?}` · `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/me` · `PATCH /api/auth/me` (display_name, color, tz, settings) |
 | groups | `GET /api/groups` · `POST /api/groups` `{name}` · `POST /api/groups/join` `{invite_code}` |
-| tasks | `GET /api/tasks?between_lectures=&max_duration=&max_energy=&include_completed=` (scored+sorted) · `POST /api/tasks/smart-add` `{task_names: string[]}` · `POST /api/tasks` (manual full body) · `PATCH /api/tasks/:id` · `POST /api/tasks/:id/toggle` · `DELETE /api/tasks/:id` · `GET /api/tasks/plan` (scored + gap-fit chips) |
+| tasks | `GET /api/tasks?between_lectures=&max_duration=&max_energy=&include_completed=` (scored+sorted) · `POST /api/tasks/smart-add` `{task_names: string[]}` · `POST /api/tasks` (manual full body, accepts `project_id?`) · `PATCH /api/tasks/:id` (incl. `project_id?`) · `POST /api/tasks/:id/toggle` · `DELETE /api/tasks/:id` · `GET /api/tasks/plan` (scored + gap-fit chips) |
+| fortnight | `GET /api/fortnight?start=` → §4.11 `{start, days[14]}` — the home page's single fetch |
+| projects | `GET /api/projects` (with `open_tasks` counts; pinned → status → sort order) · `POST /api/projects` · `PATCH /api/projects/:id` (status, next_action, pinned, …; bumps `updated_at`) · `DELETE /api/projects/:id` · `GET /api/projects/:id/tasks` · `POST /api/projects/:id/tasks` `{title, due_at?}` (enriched; `source='project'`) · `POST /api/projects/:id/suggest` (§4.12) · `POST /api/projects/:id/suggest/confirm` `{titles}` |
 | calendar | `GET /api/calendar/events?from=&to=` (own + group) · `POST/PATCH/DELETE /api/calendar/events(/:id)` · same CRUD shape for `/api/calendar/terms` and `/api/calendar/availability` · `GET /api/calendar/find?start_date=&end_date=&min_people=&only_on_break=&group_id=` · `GET /api/calendar/ical-url` · `POST /api/calendar/ical-rotate` · `GET /ical/:token.ics` (public by token) |
 | study | CRUD `/api/study/semesters(/:id)` · CRUD `/api/study/courses(/:id)` · `PUT /api/study/courses/:id/slots` (replace list) · `POST /api/study/sessions` (accepts `effort?` 1–5) · `GET /api/study/sessions?course_id=&limit=` · `DELETE /api/study/sessions/:id` · `GET /api/study/overview?semester_id=` (per-course math of §4.3 v2, incl. breakdown + `advice`) · `POST /api/study/advice` `{course_id}` (Gemini-voiced, heuristic fallback) · `GET /api/study/blocks` (proposed study blocks) · `POST /api/study/blocks/book` |
 | focus | `GET /api/focus?status=` · `POST /api/focus` `{task_id?, course_id?, goal, planned_minutes, scheduled_for?}` · `POST /api/focus/plan` `{week_start?}` → suggestions (§4.9) · `POST /api/focus/plan/confirm` `{suggestions}` → `planned` rows (`planned_by='ai'`) · `POST /api/focus/:id/start` (→ `active`; 409 if another is active) · `POST /api/focus/:id/checkin` `{actual_minutes, completion_pct, note?}` (from `planned`\|`active` → `done`; runs integration #8) · `PATCH /api/focus/:id` (edit `planned` fields; set `status='abandoned'` from `planned`\|`active`) · `DELETE /api/focus/:id` |
@@ -304,7 +360,7 @@ heuristic.
 | habits | CRUD `/api/habits(/:id)` (accepts `target_per_week?`) · `POST /api/habits/:id/log` `{date, delta}` · `GET /api/habits/today` (adds `target_per_week, weekly_done, weeks_streak`) · `GET /api/habits/history?habit_id=&weeks=` (§4.5b graph data) |
 | notifications | `GET /api/notifications?unread=` · `POST /api/notifications/read` `{ids?}` (omit = all) |
 | assistant | `GET /api/assistant/briefing?date=` (get-or-generate) · `POST /api/assistant/briefing/regenerate` · `GET /api/assistant/review` (ISO week) · `POST /api/assistant/capture` `{text}` → suggestions · `POST /api/assistant/capture/confirm` `{suggestions}` |
-| today | `GET /api/today` (composite dashboard: events, lecture blocks, gaps, top tasks, pace warnings, habits incl. weekly fields, media suggestion, unread count, `focus: {active, next}`) |
+| today | `GET /api/today` (the **/overview** page's composite: events, lecture blocks, gaps, top tasks, pace warnings, habits incl. weekly fields, media suggestion, unread count, `focus: {active, next}`, `projects: {active_count, stale}` per §4.12) |
 | search | `GET /api/search?q=` → `{tasks, events, notes, media, courses}` (≤8 each) |
 
 Errors: `{error: string}` with 400/401/403/404/409/429/502. Auth cookie: `lodestar_session`,
@@ -332,6 +388,10 @@ httpOnly, SameSite=Lax, 30-day JWT `{uid}`.
    `{course_id, date = user-local today, minutes = actual_minutes, is_self_study = true,
    note = goal, effort = clamp(linked task.cognitive_load, 1, 5) — or 3 when no task}`,
    so focus work flows straight into §4.3 pace, §4.7 auto tasks, and the grade projection.
+9. **Projects ↔ Tasks** — tasks may carry `project_id`; the project board adds/completes them
+   inline and shows open counts; the Fortnight shows project tasks by their due dates; Overview
+   nudges the quietest active project; the weekly review reports shipped / gone-quiet projects
+   (§4.12).
 
 ## 7. Scheduler (60 s tick, all times in each user's `tz`)
 
@@ -369,7 +429,8 @@ re-colour per theme. `.btn-primary` text is `var(--accent-ink)` (never hardcoded
 (`max(var(--border-w), 1px)`) so borderless themes keep legible list rows.
 Dark themes also set `color-scheme: dark` so native form controls follow. Module accents
 (`m-tasks` `#b7791f`, `m-calendar` `#2f7f6f`, `m-study` `#6b5ba5`, `m-notes` `#c9a227`,
-`m-backlog` `#b0532f`, `m-watchers` `#33718f`, `m-habits` `#4a7c43`) are theme-invariant.
+`m-backlog` `#b0532f`, `m-watchers` `#33718f`, `m-habits` `#4a7c43`, `m-projects` `#8a4f7d`)
+are theme-invariant.
 
 ### 8.2 Layout axes
 

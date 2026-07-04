@@ -250,8 +250,9 @@ const REVIEW_VOICE =
   'You are the Lodestar bureau clerk writing the WEEKLY REVIEW telegram: wry, warm, honest. ' +
   'Markdown, under 250 words. Cover: what got done (tasks completed, hours studied per course), ' +
   'what slipped (starving tasks, behind-pace courses), habit adherence, anything finished from ' +
-  'the backlog, and what next week holds (due tasks, events). Close with one specific, ' +
-  'actionable suggestion for the coming week. Sign off "— ✦ Lodestar".';
+  'the backlog, side projects shipped or gone quiet, and what next week holds (due tasks, ' +
+  'events). Close with one specific, actionable suggestion for the coming week. ' +
+  'Sign off "— ✦ Lodestar".';
 
 export async function generateWeeklyReview(user: UserRow, weekMonday: string): Promise<AssistantDoc> {
   const local = nowInTz(user.tz);
@@ -291,6 +292,18 @@ export async function generateWeeklyReview(user: UserRow, weekMonday: string): P
   );
   const habits = await habitsWithToday(user.id, user.tz);
   const warnings = await paceWarnings(user.id);
+  // §4.12 — projects shipped this review week + actives gone quiet (>14 d)
+  const shipped = await query<{ name: string }>(
+    `SELECT name FROM projects
+     WHERE user_id = $1 AND status = 'shipped' AND updated_at >= $2 AND updated_at < $3`,
+    [user.id, weekStart.toUTC().toISO(), weekEnd.toUTC().toISO()],
+  );
+  const quietProjects = await query<{ name: string; updated_at: Date }>(
+    `SELECT name, updated_at FROM projects
+     WHERE user_id = $1 AND status = 'active' AND updated_at < now() - interval '14 days'
+     ORDER BY updated_at ASC LIMIT 3`,
+    [user.id],
+  );
 
   const facts = {
     name: user.display_name,
@@ -301,6 +314,11 @@ export async function generateWeeklyReview(user: UserRow, weekMonday: string): P
     behind_pace: warnings,
     habit_streaks: habits.map((h) => ({ name: h.name, streak: h.streak })),
     finished_from_backlog: finishedMedia,
+    projects_shipped: shipped.map((p) => p.name),
+    projects_gone_quiet: quietProjects.map((p) => ({
+      name: p.name,
+      days_quiet: Math.floor((Date.now() - new Date(p.updated_at).getTime()) / 86_400_000),
+    })),
     due_soon: dueNext.map((d) => ({ title: d.title, due: new Date(d.due_at).toISOString().slice(0, 10) })),
   };
 
@@ -346,6 +364,8 @@ function renderFallbackReview(f: {
   behind_pace: PaceWarning[];
   habit_streaks: Array<{ name: string; streak: number }>;
   finished_from_backlog: Array<{ title: string; domain: string }>;
+  projects_shipped: string[];
+  projects_gone_quiet: Array<{ name: string; days_quiet: number }>;
   due_soon: Array<{ title: string; due: string }>;
 }): string {
   const lines = [`**Weekly review** — week of ${f.week_of}, for ${f.name}.`, ''];
@@ -365,6 +385,14 @@ function renderFallbackReview(f: {
   }
   if (f.finished_from_backlog.length) {
     lines.push(`**Off the backlog**: ${f.finished_from_backlog.map((m) => m.title).join(' · ')}.`);
+  }
+  if (f.projects_shipped.length) {
+    lines.push(`**Shipped**: ${f.projects_shipped.join(' · ')}. Take the lap.`);
+  }
+  if (f.projects_gone_quiet.length) {
+    lines.push(
+      `**Gone quiet**: ${f.projects_gone_quiet.map((p) => `${p.name} (${p.days_quiet}d)`).join(' · ')}.`,
+    );
   }
   if (f.due_soon.length) {
     lines.push(`**Coming up**: ${f.due_soon.map((d) => `${d.title} (${d.due})`).join(' · ')}.`);

@@ -28,6 +28,7 @@ export interface TaskRow {
   enrichment_source: Task['enrichment_source'];
   due_at: Date | null;
   course_id: string | null;
+  project_id: string | null;
   source: Task['source'];
   source_ref: string | null;
   is_completed: boolean;
@@ -81,6 +82,7 @@ const createSchema = z.object({
   duration_min: z.number().int().min(1).max(1440).optional(),
   due_at: dueAt.optional(),
   course_id: z.string().uuid().nullish(),
+  project_id: z.string().uuid().nullish(),
 });
 
 const patchSchema = z
@@ -92,8 +94,18 @@ const patchSchema = z
     duration_min: z.number().int().min(1).max(1440).optional(),
     due_at: dueAt.optional(),
     course_id: z.string().uuid().nullable().optional(),
+    project_id: z.string().uuid().nullable().optional(),
   })
   .strict();
+
+async function assertProjectOwned(userId: string, projectId: string | null | undefined) {
+  if (!projectId) return;
+  const ok = await queryOne('SELECT 1 FROM projects WHERE id = $1 AND user_id = $2', [
+    projectId,
+    userId,
+  ]);
+  if (!ok) throw badRequest('Unknown project.');
+}
 
 const idParams = z.object({ id: z.string().uuid() });
 
@@ -169,10 +181,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const e = needsEnrich ? (await enrichTitles([body.title]))[0]! : heuristicEnrich(body.title);
     const source = needsEnrich ? e.source : 'manual';
 
+    await assertProjectOwned(request.user.id, body.project_id);
     const row = await queryOne<TaskRow>(
       `INSERT INTO tasks (user_id, title, notes, importance, cognitive_load, duration_min,
-                          reasoning, enrichment_source, due_at, course_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                          reasoning, enrichment_source, due_at, course_id, project_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         request.user.id,
@@ -185,6 +198,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         source,
         body.due_at ?? null,
         body.course_id ?? null,
+        body.project_id ?? null,
       ],
     );
     return reply.code(201).send({ task: rowToTask(row!) });
@@ -201,10 +215,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     );
     if (!current) throw notFound('Task not found.');
 
+    await assertProjectOwned(request.user.id, body.project_id);
     const row = await queryOne<TaskRow>(
       `UPDATE tasks
        SET title = $3, notes = $4, importance = $5, cognitive_load = $6, duration_min = $7,
-           due_at = $8, course_id = $9
+           due_at = $8, course_id = $9, project_id = $10
        WHERE id = $1 AND user_id = $2
        RETURNING *`,
       [
@@ -217,6 +232,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         body.duration_min ?? current.duration_min,
         body.due_at !== undefined ? body.due_at : current.due_at,
         body.course_id !== undefined ? body.course_id : current.course_id,
+        body.project_id !== undefined ? body.project_id : current.project_id,
       ],
     );
     return { task: rowToTask(row!) };

@@ -3,9 +3,11 @@ import { useAuth } from './auth';
 import { Shell } from './components/Shell';
 import { Spinner } from './components/ui';
 import LoginPage from './pages/Login';
+import FortnightPage from './pages/Fortnight';
 import TodayPage from './pages/Today';
 import TasksPage from './pages/Tasks';
 import FocusPage from './pages/Focus';
+import ProjectsPage from './pages/Projects';
 import CalendarPage from './pages/Calendar';
 import StudyPage from './pages/Study';
 import NotesPage from './pages/Notes';
@@ -37,9 +39,11 @@ export default function App() {
   return (
     <Shell>
       <Routes>
-        <Route path="/" element={<TodayPage />} />
+        <Route path="/" element={<FortnightPage />} />
+        <Route path="/overview" element={<TodayPage />} />
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/focus" element={<FocusPage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/study" element={<StudyPage />} />
         <Route path="/notes" element={<NotesPage />} />
