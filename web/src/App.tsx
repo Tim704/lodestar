@@ -1,8 +1,10 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth';
 import { Shell } from './components/Shell';
 import { Spinner } from './components/ui';
 import LoginPage from './pages/Login';
+import GuidePage from './pages/Guide';
 import FortnightPage from './pages/Fortnight';
 import TodayPage from './pages/Today';
 import TasksPage from './pages/Tasks';
@@ -18,6 +20,14 @@ import SettingsPage from './pages/Settings';
 
 export default function App() {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  // §8.4 — the Guide opens once per device on first login
+  useEffect(() => {
+    if (user && !localStorage.getItem('lodestar-guide-seen')) {
+      navigate('/guide');
+    }
+  }, [user, navigate]);
 
   if (loading) {
     return (
@@ -50,6 +60,7 @@ export default function App() {
         <Route path="/backlog" element={<BacklogPage />} />
         <Route path="/watchers" element={<WatchersPage />} />
         <Route path="/review" element={<ReviewPage />} />
+        <Route path="/guide" element={<GuidePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

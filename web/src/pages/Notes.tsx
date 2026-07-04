@@ -268,13 +268,13 @@ function NoteCard({
           onChange={(e) => note.set('title', e.target.value)}
         />
         <button
-          className="text-xs text-muted hover:text-ink"
+          className="tap text-xs text-muted hover:text-ink"
           title={isChecklist ? 'Turn into prose' : 'Turn into checklist'}
           onClick={() => note.set('isChecklist', !isChecklist)}
         >
           {isChecklist ? '¶' : '☑'}
         </button>
-        <button className="text-xs text-muted hover:text-[#a13d2d]" title="Delete note" onClick={onDelete}>
+        <button className="tap text-xs text-muted hover:text-[#a13d2d]" title="Delete note" onClick={onDelete}>
           ✕
         </button>
       </div>

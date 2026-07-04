@@ -69,12 +69,12 @@ export default function ProjectsPage() {
 
       <ErrorNote error={error} />
 
-      <div className="-mx-4 overflow-x-auto px-4 pb-2">
+      <div className="-mx-4 snap-x overflow-x-auto overscroll-x-contain px-4 pb-2">
         <div className="flex items-start gap-3" style={{ minWidth: 'max-content' }}>
           {COLUMNS.map((col) => {
             const items = projects.filter((p) => p.status === col.status);
             return (
-              <section key={col.status} className="w-64 flex-none">
+              <section key={col.status} className="w-64 flex-none snap-start scroll-ml-4">
                 <div className="mb-2 flex items-baseline justify-between px-0.5">
                   <h2 className="h-display text-lg">{col.label}</h2>
                   <span className="tnum text-xs text-muted">
@@ -173,7 +173,7 @@ function ProjectCard({
     <div className="card p-3" style={p.color ? { borderColor: p.color } : undefined}>
       <div className="flex items-start gap-1.5">
         <button
-          className={`flex-none text-sm ${p.pinned ? 'text-gold' : 'text-line hover:text-gold'}`}
+          className={`tap flex-none text-sm ${p.pinned ? 'text-gold' : 'text-line hover:text-gold'}`}
           title={p.pinned ? 'Unpin' : 'Pin to top'}
           onClick={onPin}
         >
@@ -182,7 +182,7 @@ function ProjectCard({
         <button className="h-display min-w-0 flex-1 truncate text-left text-base hover:underline" onClick={onExpand}>
           {p.name}
         </button>
-        <button className="flex-none text-xs text-muted hover:text-ink" title="Edit" onClick={onEdit}>
+        <button className="tap flex-none text-xs text-muted hover:text-ink" title="Edit" onClick={onEdit}>
           ✎
         </button>
       </div>

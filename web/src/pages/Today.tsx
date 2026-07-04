@@ -271,14 +271,14 @@ export default function TodayPage() {
                       {h.today_count}/{h.target_per_day}
                     </span>
                     <button
-                      className="btn-ghost !px-2 !py-0"
+                      className="btn-ghost tap !px-2 !py-0"
                       onClick={() => void tapHabit(h.id, -1)}
                       disabled={h.today_count === 0}
                     >
                       −
                     </button>
                     <button
-                      className={`${h.today_count >= h.target_per_day ? 'btn-ghost' : 'btn-primary'} !px-2 !py-0`}
+                      className={`${h.today_count >= h.target_per_day ? 'btn-ghost' : 'btn-primary'} tap !px-2 !py-0`}
                       onClick={() => void tapHabit(h.id, 1)}
                     >
                       +

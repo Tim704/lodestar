@@ -2,6 +2,7 @@
 // management, the iCal feed, sign out.
 
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { Group, Habit } from '@lodestar/shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -101,10 +102,16 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <h1 className="h-display text-3xl">⚙ Settings</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="h-display text-3xl">⚙ Settings</h1>
+        <Link to="/guide" className="btn-ghost !py-1 text-xs">
+          ? Open the guide
+        </Link>
+      </div>
       <ErrorNote error={error} />
 
       <AppearanceSection />
+      <InstallSection />
 
       {/* profile */}
       <section className="card p-4">
@@ -299,6 +306,60 @@ export default function SettingsPage() {
         Sign out
       </button>
     </div>
+  );
+}
+
+/** §8.4 — install Lodestar to the home screen (prompt captured in main.tsx). */
+function InstallSection() {
+  const [ready, setReady] = useState(() => Boolean(window.__lodestarInstall));
+  const [installed, setInstalled] = useState(
+    () => window.matchMedia('(display-mode: standalone)').matches,
+  );
+
+  useEffect(() => {
+    const onReady = () => setReady(true);
+    const onInstalled = () => setInstalled(true);
+    window.addEventListener('lodestar-install-ready', onReady);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('lodestar-install-ready', onReady);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  return (
+    <section className="card p-4">
+      <h2 className="h-display mb-1 text-lg">On your phone</h2>
+      {installed ? (
+        <p className="text-sm text-muted">Installed ✦ — you're running Lodestar as an app.</p>
+      ) : ready ? (
+        <>
+          <p className="mb-2 text-xs text-muted">
+            Put Lodestar on your home screen — full screen, no browser bars, feels like a real app.
+          </p>
+          <button
+            className="btn-primary"
+            onClick={() => void window.__lodestarInstall?.prompt()}
+          >
+            ⇩ Install Lodestar
+          </button>
+        </>
+      ) : isIos ? (
+        <p className="text-sm text-muted">
+          On iPhone: open the <b className="text-ink">Share</b> menu in Safari and tap
+          <b className="text-ink"> "Add to Home Screen"</b> — Lodestar then launches full screen
+          like a real app.
+        </p>
+      ) : (
+        <p className="text-sm text-muted">
+          Your browser will offer an install button here once it considers the site eligible
+          (usually after a visit or two). On Android Chrome you can also use ⋮ →
+          "Add to Home screen".
+        </p>
+      )}
+    </section>
   );
 }
 

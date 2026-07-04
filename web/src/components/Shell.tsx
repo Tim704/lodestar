@@ -50,7 +50,7 @@ function ThemeMenu() {
   return (
     <div className="relative" ref={ref}>
       <button
-        className="btn-ghost !px-2.5"
+        className="btn-ghost tap !px-2.5"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Theme: ${theme.label}. Change theme`}
@@ -128,7 +128,7 @@ export function Shell({ children }: { children: ReactNode }) {
     }`;
 
   const mobileBar = (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex justify-around border-t-2 border-edge bg-panel px-1 py-1.5 md:hidden">
+    <nav className="mobile-dock fixed inset-x-0 bottom-0 z-40 flex justify-around border-t-2 border-edge bg-panel px-1 pt-1.5 md:hidden">
       {NAV.filter((n) => n.mobile).map((n) => (
         <NavLink
           key={n.to}
@@ -178,7 +178,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </nav>
             <div className="ml-auto flex items-center gap-1.5">
               <button
-                className="btn-ghost !px-2.5"
+                className="btn-ghost tap !px-2.5"
                 onClick={() => setCmdOpen(true)}
                 aria-label="Search and capture (Ctrl K)"
                 title="Search / capture (Ctrl K)"
@@ -187,6 +187,9 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
               <Bell />
               <ThemeMenu />
+              <NavLink to="/guide" className="btn-ghost tap !px-2.5" title="Guide" aria-label="Guide">
+                ?
+              </NavLink>
               <NavLink to="/review" className="btn-ghost hidden !px-2.5 md:inline-flex" title="Weekly review">
                 ✉
               </NavLink>
@@ -205,8 +208,10 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl px-4 pb-24 pt-4 md:pb-8">{children}</div>
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 md:pb-8">
+            {children}
+          </div>
         </main>
 
         {mobileBar}
@@ -258,7 +263,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex items-center gap-2">
             <button
-              className="btn-ghost !px-2.5 md:hidden"
+              className="btn-ghost tap !px-2.5 md:hidden"
               onClick={() => setCmdOpen(true)}
               aria-label="Search"
             >
@@ -266,10 +271,15 @@ export function Shell({ children }: { children: ReactNode }) {
             </button>
             <Bell />
             <ThemeMenu />
+            <NavLink to="/guide" className="btn-ghost tap !px-2.5" title="Guide" aria-label="Guide">
+              ?
+            </NavLink>
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-24 pt-2 md:pb-8">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-2 md:pb-8">
+          {children}
+        </main>
       </div>
 
       {mobileBar}

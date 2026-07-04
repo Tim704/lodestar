@@ -1,10 +1,18 @@
-# Lodestar — Contract v4
+# Lodestar — Contract v5
 
 **Single source of truth.** Every identifier, route, env var, formula, and constant in the
 codebase must match this document literally. When code and contract disagree, the contract wins;
 change the contract first, then the code.
 
 ## Changelog
+
+- **v5 (2026-07-04)** — phone-ready + the Guide:
+  - New §8.4 mobile/touch/install invariants: ≥16px form controls below `sm`, `.tap` 44px hit
+    areas, safe-area insets on fixed bottom UI, no horizontal body scroll, **bottom-sheet modals
+    below `sm`**, installable PWA (apple metas, maskable PNG icons, `beforeinstallprompt`
+    affordance in Settings).
+  - New page **`/guide`** — the plain-language tutorial; header "?" in both nav layouts and a
+    Settings link; auto-opens once per device (`localStorage.lodestar-guide-seen`).
 
 - **v4 (2026-07-04)** — page reorg + Projects:
   - Home `/` is now the **Fortnight** — a two-week calendar of classes, due tasks, and events
@@ -452,6 +460,29 @@ are theme-invariant.
 
 The theme registry (`web/src/themes.ts`) carries `{id, label, vibe, nav, density, dark}` only —
 token values live solely in CSS; previews re-scope them with a `data-theme` attribute.
+
+### 8.4 Mobile, touch & install (v5 invariants — hold in every theme)
+
+- **No iOS focus-zoom:** below the `sm` breakpoint, `input`/`select`/`textarea`/`.input`
+  render at ≥ 16px font-size.
+- **Hit areas:** icon-only controls carry the `.tap` helper — a centered pseudo-element
+  extends the hit area to ≥ 44×44px without changing visual size.
+- **Safe areas:** the fixed mobile dock pads `env(safe-area-inset-bottom)` (`.mobile-dock`);
+  scroll containers pad the bottom to clear it. `viewport-fit=cover` stays set.
+- **No horizontal body scroll:** `body{overflow-x:hidden}` is the backstop; wide content
+  (Projects board, Calendar grid, chip rows) scrolls inside its own `overflow-x-auto`
+  container. Scroll containers use `overscroll-contain`.
+- **Modals are bottom sheets below `sm`:** full-width, pinned to the bottom, top corners only,
+  `max-height: 85dvh`, internal scroll, grab handle, safe-area bottom padding; the centered
+  dialog returns at `sm+`. One component (`ui.tsx` `Modal`) implements this for the whole app.
+- **Installable PWA:** manifest has `id:"/"`, `scope:"/"`, `start_url:"/"`, `display:standalone`,
+  SVG icon + 512px PNG (`purpose:"any maskable"`); `apple-touch-icon.png` (180px) +
+  `apple-mobile-web-app-*` metas; `beforeinstallprompt` is captured at boot
+  (`window.__lodestarInstall`) and surfaced as an Install button in Settings (iOS gets an
+  Add-to-Home-Screen hint instead).
+- **Pages:** `/guide` is a static, no-API tutorial reachable from the header "?" (both nav
+  layouts) and Settings; it auto-opens once per device via `localStorage.lodestar-guide-seen`
+  (set on first view; "Skip the tour" just navigates home).
 
 ## 9. Notes CRDT layout (one Y.Doc per tab, persisted as a merged update in `note_tabs.ydoc`)
 

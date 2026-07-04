@@ -23,17 +23,24 @@ export function Modal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // §8.4: bottom sheet below `sm`, centered dialog above it
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[8vh]"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-start sm:p-4 sm:pt-[8vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[80vh] overflow-y-auto`}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`card sheet-in w-full ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[85dvh] overflow-y-auto overscroll-contain rounded-b-none pb-[env(safe-area-inset-bottom)] sm:max-h-[80vh] sm:rounded-b-[var(--radius)] sm:pb-0`}
+      >
+        <div className="mx-auto mt-1.5 h-1 w-10 rounded-full bg-line sm:hidden" aria-hidden="true" />
         <div className="flex items-center justify-between border-b-2 border-ink px-4 py-2.5">
           <h2 className="h-display text-lg">{title}</h2>
-          <button className="btn-ghost !px-2 !py-0.5" onClick={onClose} aria-label="Close">
+          <button className="btn-ghost tap !px-2 !py-0.5" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>

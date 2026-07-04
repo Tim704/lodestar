@@ -232,7 +232,7 @@ export default function TasksPage() {
                   )}
                 </div>
                 <button
-                  className="btn-ghost !px-2 !py-0.5 text-xs"
+                  className="btn-ghost tap !px-2 !py-0.5 text-xs"
                   onClick={() => setExpanded(expanded === t.id ? null : t.id)}
                 >
                   {expanded === t.id ? '▴' : '▾'}

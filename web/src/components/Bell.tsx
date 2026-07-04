@@ -49,7 +49,7 @@ export function Bell() {
 
   return (
     <div className="relative" ref={ref}>
-      <button className="btn-ghost relative !px-2.5" onClick={() => void openAndRead()} aria-label="Notifications">
+      <button className="btn-ghost tap relative !px-2.5" onClick={() => void openAndRead()} aria-label="Notifications">
         ◎
         {unread > 0 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-ink bg-[#a13d2d] px-0.5 text-[10px] font-bold text-white">
@@ -58,7 +58,7 @@ export function Bell() {
         )}
       </button>
       {open && (
-        <div className="card absolute right-0 z-50 mt-2 max-h-96 w-80 overflow-y-auto">
+        <div className="card absolute right-0 z-50 mt-2 max-h-96 w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain">
           <div className="border-b-2 border-ink px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted">
             Notifications
           </div>
